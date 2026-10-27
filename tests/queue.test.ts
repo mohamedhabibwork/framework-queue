@@ -1,7 +1,16 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { Application, type ExecutionContext as Ctx, EXECUTION_CONTEXT, ExecutionContext } from '@framework/core';
 import { z } from 'zod/v4';
-import { type BatchStatus, defineJob, type JobStatus, JobWorker, QueueManager } from '../src';
+import {
+  type BatchStatus,
+  createQueueProvider,
+  defineJob,
+  type JobStatus,
+  JobWorker,
+  QUEUE,
+  QueueKitAdapter,
+  QueueManager,
+} from '../src';
 
 const redisUrl = process.env.REDIS_URL;
 if (!redisUrl) throw new Error('REDIS_URL is not set; run `bun run db:up` and see .env.test.example');
@@ -218,5 +227,24 @@ describe('Queue batches (BullMQ on real Redis)', () => {
     const batchId = `dup-${crypto.randomUUID()}`;
     await manager.dispatchBatch(double, [{ value: 1 }], context, { batchId });
     await expect(manager.dispatchBatch(double, [{ value: 2 }], context, { batchId })).rejects.toThrow(/already exists/);
+  });
+
+  test('createQueueProvider binds QUEUE backed by QueueKitAdapter and closes cleanly', async () => {
+    const providerPrefix = `prov-${crypto.randomUUID()}`;
+    type QueueAppConfig = { queue: { url: string; prefix: string; queue: string } };
+    const app = new Application<QueueAppConfig>({
+      config: { queue: { url: redisUrl, prefix: providerPrefix, queue: 'tests' } },
+      providers: [createQueueProvider<QueueAppConfig>((cfg) => cfg.queue)],
+    });
+    await app.boot();
+    try {
+      const bound = app.container.resolve(QUEUE);
+      expect(bound).toBeInstanceOf(QueueManager);
+      expect(bound.transport).toBeInstanceOf(QueueKitAdapter);
+      const counts = await bound.counts();
+      expect(typeof counts.waiting).toBe('number');
+    } finally {
+      await app.shutdown();
+    }
   });
 });
