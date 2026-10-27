@@ -21,7 +21,7 @@ export interface WorkerOptions {
 const DEFAULT_TIMEOUT_MS = 5 * 60_000;
 
 // Definitions are heterogeneous; erase them to one runtime shape keyed by name.
-// biome-ignore lint/suspicious/noExplicitAny: accepts definitions with any payload/result types
+// oxlint-disable-next-line typescript/no-explicit-any -- accepts definitions with any payload/result types
 export type JobList = readonly JobDefinition<any, any>[];
 
 /**
