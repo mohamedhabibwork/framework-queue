@@ -25,6 +25,7 @@ export type {
   JobList,
   JobState,
   JobStatus,
+  QueueConnectionOptions,
   QueueOptions,
   WorkerOptions,
 } from './types';

@@ -10,6 +10,26 @@ export const queueConfigSchema = z.object({
   queue: z.string().min(1).default('default'),
   keepCompleted: z.number().int().positive().optional(),
   keepFailed: z.number().int().positive().optional(),
+  /** BullMQ connection fields merged over `url` (db, auth, TLS). */
+  connection: z
+    .object({
+      host: z.string().min(1).optional(),
+      port: z.number().int().positive().optional(),
+      username: z.string().optional(),
+      password: z.string().optional(),
+      db: z.number().int().min(0).optional(),
+      tls: z.record(z.string(), z.unknown()).optional(),
+      maxRetriesPerRequest: z.number().int().nullable().optional(),
+      enableReadyCheck: z.boolean().optional(),
+      connectTimeout: z.number().int().positive().optional(),
+    })
+    .optional(),
+  /** BullMQ job options applied to every dispatch. */
+  defaultJobOptions: z.record(z.string(), z.unknown()).optional(),
+  /** BullMQ rate limiter. */
+  limiter: z.object({ max: z.number().int().positive(), duration: z.number().int().positive() }).optional(),
+  /** Raw BullMQ `QueueOptions` forwarded verbatim. */
+  native: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**

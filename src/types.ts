@@ -2,5 +2,13 @@
 
 export type { BatchCompletionJob, BatchRecord, BatchState } from './batch';
 export type { AnyJobDefinition, JobContext, JobDefinition, JobEnvelope } from './job';
-export type { BatchDispatchOptions, BatchStatus, DispatchOptions, JobState, JobStatus, QueueOptions } from './manager';
+export type {
+  BatchDispatchOptions,
+  BatchStatus,
+  DispatchOptions,
+  JobState,
+  JobStatus,
+  QueueConnectionOptions,
+  QueueOptions,
+} from './manager';
 export type { JobList, WorkerOptions } from './worker';

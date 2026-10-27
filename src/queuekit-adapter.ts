@@ -70,6 +70,10 @@ export interface EnqueueOptions {
   readonly backoffMs: number;
   readonly keepCompleted: number;
   readonly keepFailed: number;
+  /** BullMQ priority for this dispatch. */
+  readonly priority?: number;
+  /** Raw BullMQ `JobsOptions`, merged last (per-dispatch escape hatch). */
+  readonly native?: Readonly<Record<string, unknown>>;
 }
 
 const STATES: readonly JobState[] = ['waiting', 'active', 'completed', 'failed', 'delayed', 'paused'];
@@ -108,7 +112,20 @@ export class QueueKitAdapter {
   readonly #connection: ConnectionOptions;
   readonly #prefix: string;
 
-  constructor(options: { readonly connection: ConnectionOptions; readonly prefix: string; readonly queue: string }) {
+  readonly #defaultJobOptions: Readonly<Record<string, unknown>>;
+
+  constructor(options: {
+    readonly connection: ConnectionOptions;
+    readonly prefix: string;
+    readonly queue: string;
+    /** BullMQ default job options applied to every dispatch. */
+    readonly defaultJobOptions?: Readonly<Record<string, unknown>>;
+    /** BullMQ rate limiter (`max` per `duration` ms). */
+    readonly limiter?: { readonly max: number; readonly duration: number };
+    /** Extra BullMQ `Queue` options forwarded verbatim. */
+    readonly native?: Readonly<Record<string, unknown>>;
+  }) {
+    this.#defaultJobOptions = options.defaultJobOptions ?? {};
     this.#connection = options.connection;
     this.#prefix = options.prefix;
     this.queueName = options.queue;
@@ -122,6 +139,10 @@ export class QueueKitAdapter {
       prefix: options.prefix,
     });
     this.queue = new Queue<JobEnvelope, JsonValue>(options.queue, {
+      // Framework-owned keys win over the escape hatch: `connection` and
+      // `prefix` are what the adapter's inspection surface relies on.
+      ...(options.native ?? {}),
+      ...(options.limiter !== undefined ? { limiter: options.limiter } : {}),
       connection: options.connection,
       prefix: options.prefix,
     });
@@ -139,12 +160,18 @@ export class QueueKitAdapter {
       { type: name, payload: envelope, correlationId: envelope.correlationId },
       {
         idempotencyKey: options.jobId,
-        delay: options.delayMs,
+        ...(options.delayMs !== undefined ? { delay: options.delayMs } : {}),
+        ...(options.priority !== undefined ? { priority: options.priority } : {}),
         native: {
+          // Defaults first, then the framework's policy, then the caller's raw
+          // JobsOptions — so an explicit per-dispatch option always wins.
+          ...this.#defaultJobOptions,
           attempts: options.attempts,
           backoff: { type: 'exponential', delay: options.backoffMs },
           removeOnComplete: { count: options.keepCompleted },
           removeOnFail: { count: options.keepFailed },
+          ...(options.priority !== undefined ? { priority: options.priority } : {}),
+          ...(options.native ?? {}),
         },
       },
     );

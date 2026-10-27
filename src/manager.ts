@@ -40,6 +40,22 @@ const jsonValue: z.ZodType<JsonValue> = z.lazy(() =>
   z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(jsonValue), z.record(z.string(), jsonValue)]),
 );
 
+/** BullMQ connection fields beyond the URL (auth, database, TLS). */
+export interface QueueConnectionOptions {
+  readonly host?: string;
+  readonly port?: number;
+  readonly username?: string;
+  readonly password?: string;
+  /** Redis logical database. */
+  readonly db?: number;
+  /** TLS options for `rediss://`-style endpoints. */
+  readonly tls?: Record<string, unknown>;
+  /** Fail fast instead of retrying forever (BullMQ requires `null` for workers). */
+  readonly maxRetriesPerRequest?: number | null;
+  readonly enableReadyCheck?: boolean;
+  readonly connectTimeout?: number;
+}
+
 export interface QueueOptions {
   readonly url: string;
   /** Redis key prefix so several apps can share one Redis. */
@@ -48,6 +64,21 @@ export interface QueueOptions {
   /** Completed/failed jobs kept for inspection (bounded). */
   readonly keepCompleted?: number;
   readonly keepFailed?: number;
+  /** Extra BullMQ connection fields (db, auth, TLS) merged over the URL. */
+  readonly connection?: QueueConnectionOptions;
+  /**
+   * Default BullMQ job options applied to every dispatch
+   * (`attempts`, `backoff`, `removeOnComplete`, `removeOnFail`, `priority`, …).
+   * Per-dispatch options win over these.
+   */
+  readonly defaultJobOptions?: Readonly<Record<string, unknown>>;
+  /** BullMQ rate limiter (`max` jobs per `duration` ms). */
+  readonly limiter?: { readonly max: number; readonly duration: number };
+  /**
+   * Extra BullMQ `Queue` options forwarded verbatim (`streams`, `skipVersionCheck`,
+   * `defaultJobOptions`, …). The escape hatch for anything not modelled above.
+   */
+  readonly native?: Readonly<Record<string, unknown>>;
 }
 
 export interface DispatchOptions {
@@ -55,6 +86,13 @@ export interface DispatchOptions {
   readonly delayMs?: number;
   /** Overrides the definition's attempt count for this dispatch. */
   readonly attempts?: number;
+  /** BullMQ priority (lower runs first; 0 is the default). */
+  readonly priority?: number;
+  /**
+   * Raw BullMQ `JobsOptions` for this dispatch, merged last — the escape hatch
+   * for `removeOnComplete`, `backoff`, `failParentOnFailure`, `stackTraceLimit`, …
+   */
+  readonly native?: Readonly<Record<string, unknown>>;
 }
 
 export interface BatchDispatchOptions {
@@ -109,13 +147,16 @@ export class QueueManager {
   readonly transport: QueueKitAdapter;
 
   constructor(readonly options: QueueOptions) {
-    this.connection = redisConnection(options.url);
+    this.connection = { ...redisConnection(options.url), ...(options.connection ?? {}) };
     // queuekit owns the enqueue transport and provider lifecycle; job
     // contracts, scopes and batches stay framework-owned (see adapter docs).
     this.transport = new QueueKitAdapter({
       connection: this.connection,
       prefix: options.prefix,
       queue: options.queue ?? 'default',
+      ...(options.defaultJobOptions !== undefined ? { defaultJobOptions: options.defaultJobOptions } : {}),
+      ...(options.limiter !== undefined ? { limiter: options.limiter } : {}),
+      ...(options.native !== undefined ? { native: options.native } : {}),
     });
     this.queue = this.transport.queue;
     this.redis = new Redis({ ...this.connection, maxRetriesPerRequest: null, lazyConnect: false } as RedisOptions);
@@ -207,6 +248,8 @@ export class QueueManager {
       backoffMs: definition.backoffMs ?? 1_000,
       keepCompleted: this.options.keepCompleted ?? 1_000,
       keepFailed: this.options.keepFailed ?? 5_000,
+      ...(options.priority !== undefined ? { priority: options.priority } : {}),
+      ...(options.native !== undefined ? { native: options.native } : {}),
     });
   }
 
