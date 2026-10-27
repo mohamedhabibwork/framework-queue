@@ -1,0 +1,27 @@
+{
+  "name": "@framework/queue",
+  "version": "0.2.0",
+  "description": "BullMQ job queue manager, worker runtime, and retry policies.",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "homepage": "https://github.com/mohamedhabibwork/framework-queue#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mohamedhabibwork/framework.git",
+    "directory": "packages/queue"
+  },
+  "bugs": {
+    "url": "https://github.com/mohamedhabibwork/framework/issues"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@framework/core": "workspace:*",
+    "@mohamedhabibwork/queuekit": "0.4.1",
+    "bullmq": "6.4.1",
+    "ioredis": "6.0.0",
+    "zod": "4.6.7"
+  }
+}
